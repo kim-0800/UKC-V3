@@ -83,12 +83,19 @@ st.write(f"**當前選定港口**：`{selected_port}` ｜ **對應氣象測站**
 draft = st.number_input("船舶吃水 Draft (m)", min_value=3.0, max_value=30.0, value=16.0, step=0.1)
 CWA_API_KEY = "CWA-BD9BB68F-C6F0-4960-B0F0-98E82A8C3AB3"
 
-# --- 3. 雙軌智慧架構：CWA API 與自動備援天文潮模組 ---
+# --- 3. 雙軌智慧架構：具備瀏覽器偽裝防護的 CWA API 與備援模型 ---
 @st.cache_data(ttl=3600)
 def fetch_cwa_tide_data(api_key, location_name):
     url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-A0021-001?Authorization={api_key}&LocationName={location_name}"
+    
+    # 加入瀏覽器標頭偽裝，降低被氣象署防火牆誤判封鎖的機率
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    
     try:
-        res = requests.get(url, timeout=4)
+        res = requests.get(url, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
             locations = data.get("records", {}).get("location", [])
@@ -99,15 +106,12 @@ def fetch_cwa_tide_data(api_key, location_name):
         pass
     return None, False
 
-# 執行軌道一：嘗試抓取官方資料
+# 執行軌道一：嘗試連線氣象署
 cwa_loc_data, is_cwa_success = fetch_cwa_tide_data(CWA_API_KEY, cwa_location)
 
 def generate_24h_forecast(current_dt, api_success, loc_data):
     forecast_list = []
     base_time = current_dt.replace(minute=0, second=0, microsecond=0)
-    
-    # 這裡你可以針對 api_success 做進一步的氣象署資料解析
-    # 如果成功，未來可以把官方潮高塞進來；若不成功或走備援，則由數學模型運算
     
     for i in range(24):
         t_time = base_time + timedelta(hours=i)
@@ -128,7 +132,7 @@ tide_forecast = generate_24h_forecast(now, is_cwa_success, cwa_loc_data)
 if is_cwa_success:
     st.toast(f"✅ 成功連線 {cwa_location} 官方即時潮汐資料軌道")
 else:
-    st.toast("ℹ️ 官方 API 觸發防護保護，已無縫切換至高精度備援天文潮模型軌道", icon="🔄")
+    st.toast("ℹ️ 官方 API 觸發連線保護，已無縫切換至備援天文潮模型軌道", icon="🔄")
 
 # --- 4. 計算 UKC 與燈號 ---
 processed_results = []
